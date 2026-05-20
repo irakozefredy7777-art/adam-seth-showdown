@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Arena3D } from "./Arena3D";
 import { Fighter } from "./Fighter";
 import { ARENAS } from "./arenas";
 
+interface DamageNumber {
+  id: number;
+  value: string;
+  x: string;
+  color: string;
+  isBlock?: boolean;
+}
+
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
+
+let dmgId = 0;
 
 export default function Game() {
   const [stage, setStage] = useState(0);
@@ -19,8 +29,37 @@ export default function Game() {
   const [sethHit, setSethHit] = useState(false);
   const [adamBlocking, setAdamBlocking] = useState(false);
 
+  const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
+  const [screenFlash, setScreenFlash] = useState(false);
+  const [cameraShake, setCameraShake] = useState(false);
+
   const adamCdRef = useRef(0);
   const sethCdRef = useRef(0);
+
+  const addDamageNumber = useCallback((value: string, x: string, color: string, isBlock?: boolean) => {
+    const id = ++dmgId;
+    setDamageNumbers(prev => [...prev, { id, value, x, color, isBlock }]);
+    setTimeout(() => {
+      setDamageNumbers(prev => prev.filter(d => d.id !== id));
+    }, 900);
+  }, []);
+
+  const triggerHitEffects = useCallback((isAdamHit: boolean, isBlocked: boolean) => {
+    setScreenFlash(true);
+    setCameraShake(true);
+    setTimeout(() => setScreenFlash(false), 120);
+    setTimeout(() => setCameraShake(false), 250);
+
+    if (isAdamHit) {
+      if (isBlocked) {
+        addDamageNumber("BLOCKED", "25%", "#6ab8ff", true);
+      } else {
+        addDamageNumber(`-${Math.round(arena.sethPower)}`, "25%", "#ff5555");
+      }
+    } else {
+      addDamageNumber(`-${Math.round(arena.adamDamage)}`, "75%", "#ffcc55");
+    }
+  }, [addDamageNumber, arena.sethPower, arena.adamDamage]);
 
   // reset on stage change
   useEffect(() => {
@@ -40,16 +79,18 @@ export default function Game() {
       setTimeout(() => {
         setAdamHit(true);
         setTimeout(() => setAdamHit(false), 250);
+        const wasBlocking = adamBlocking;
         setAdamHp((hp) => {
-          const dmg = adamBlocking ? arena.sethPower * 0.2 : arena.sethPower;
+          const dmg = wasBlocking ? arena.sethPower * 0.2 : arena.sethPower;
           const next = Math.max(0, hp - dmg);
           if (next <= 0) setPhase("defeat");
           return next;
         });
+        triggerHitEffects(true, wasBlocking);
       }, 400);
     }, 1800 - stage * 100);
     return () => clearInterval(interval);
-  }, [phase, stage, adamBlocking, arena.sethPower]);
+  }, [phase, stage, adamBlocking, arena.sethPower, triggerHitEffects]);
 
   // keyboard
   useEffect(() => {
@@ -79,6 +120,7 @@ export default function Game() {
             if (next <= 0) setPhase("victory");
             return next;
           });
+          triggerHitEffects(false, false);
         }, 200);
       }
       if (e.key.toLowerCase() === "k" || e.key === "Shift") {
@@ -91,37 +133,57 @@ export default function Game() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [phase, stage, arena.adamDamage]);
+  }, [phase, stage, arena.adamDamage, triggerHitEffects]);
 
   const adamPct = (adamHp / arena.adamHp) * 100;
   const sethPct = (sethHp / arena.sethHp) * 100;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      <Canvas shadows camera={{ position: [0, 3, 9], fov: 50 }}>
-        <Arena3D arena={arena} />
-        <Fighter
-          position={[-2.2, 0, 0]}
-          isKid
-          attacking={adamAttacking}
-          hit={adamHit}
-          facing={1}
-          swordColor={arena.swordColor}
-          swordScale={arena.swordScale * 0.7}
-          skinColor="#f2cba0"
-          shirtColor="#2d5a8a"
-        />
-        <Fighter
-          position={[2.2, 0, 0]}
-          attacking={sethAttacking}
-          hit={sethHit}
-          facing={-1}
-          swordColor="#8a8a95"
-          swordScale={1.6 + stage * 0.15}
-          skinColor="#c89878"
-          shirtColor="#5a1a1a"
-        />
-      </Canvas>
+      {/* Camera shake wrapper */}
+      <div className={`h-full w-full ${cameraShake ? "camera-shake" : ""}`}>
+        <Canvas shadows camera={{ position: [0, 3, 9], fov: 50 }}>
+          <Arena3D arena={arena} />
+          <Fighter
+            position={[-2.2, 0, 0]}
+            isKid
+            attacking={adamAttacking}
+            hit={adamHit}
+            facing={1}
+            swordColor={arena.swordColor}
+            swordScale={arena.swordScale * 0.7}
+            skinColor="#f2cba0"
+            shirtColor="#2d5a8a"
+            blocking={adamBlocking}
+          />
+          <Fighter
+            position={[2.2, 0, 0]}
+            attacking={sethAttacking}
+            hit={sethHit}
+            facing={-1}
+            swordColor="#8a8a95"
+            swordScale={1.6 + stage * 0.15}
+            skinColor="#c89878"
+            shirtColor="#5a1a1a"
+          />
+        </Canvas>
+      </div>
+
+      {/* Screen flash on hit */}
+      {screenFlash && (
+        <div className="pointer-events-none absolute inset-0 bg-white/20" style={{ animation: "flashOut 0.15s ease-out forwards" }} />
+      )}
+
+      {/* Floating damage numbers */}
+      {damageNumbers.map(d => (
+        <div
+          key={d.id}
+          className={`pointer-events-none absolute top-1/3 font-display text-4xl font-bold damage-float ${d.isBlock ? "text-sky-400" : ""}`}
+          style={{ left: d.x, color: d.color }}
+        >
+          {d.value}
+        </div>
+      ))}
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 p-6">
@@ -134,6 +196,15 @@ export default function Game() {
           <HpBar name="SETH" hp={sethHp} max={arena.sethHp} pct={sethPct} color="var(--hp-seth)" align="right" />
         </div>
       </div>
+
+      {/* Block indicator */}
+      {adamBlocking && phase === "fight" && (
+        <div className="pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2">
+          <div className="rounded-full border-2 border-sky-400 bg-sky-400/20 px-6 py-2 font-display text-sm uppercase tracking-[0.3em] text-sky-300 backdrop-blur">
+            Blocking
+          </div>
+        </div>
+      )}
 
       {/* Controls hint */}
       {phase === "fight" && (
