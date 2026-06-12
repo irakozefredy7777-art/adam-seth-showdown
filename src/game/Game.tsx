@@ -80,7 +80,8 @@ function GameScene({
         rotationY={playerRot}
         isPlayer
         firing={playerFiring}
-        walking={false}
+        walking={playerWalking}
+        running={playerRunning}
         shirtColor="#2d5a8a"
         skinColor="#f2cba0"
       />
