@@ -46,9 +46,15 @@ export function Shooter({
 
     // walk cycle
     if (leftLeg.current && rightLeg.current) {
-      const amp = walking ? 0.6 : 0;
-      leftLeg.current.rotation.x = Math.sin(t * 10) * amp;
-      rightLeg.current.rotation.x = -Math.sin(t * 10) * amp;
+      const amp = walking ? (running ? 1.0 : 0.6) : 0;
+      const freq = running ? 16 : 10;
+      leftLeg.current.rotation.x = Math.sin(t * freq) * amp;
+      rightLeg.current.rotation.x = -Math.sin(t * freq) * amp;
+    }
+    // body bob
+    if (group.current && walking) {
+      const freq = running ? 16 : 10;
+      group.current.position.y = position[1] + Math.abs(Math.sin(t * freq)) * (running ? 0.08 : 0.04);
     }
 
     // gun recoil
