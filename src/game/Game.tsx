@@ -47,6 +47,8 @@ function GameScene({
   playerPos,
   playerRot,
   playerFiring,
+  playerWalking,
+  playerRunning,
   enemies,
   bullets,
   onPlayerHit,
