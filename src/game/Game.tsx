@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import * as THREE from "three";
-import { Arena3D } from "./Arena3D";
+import { Arena3D, type CarInstance } from "./Arena3D";
 import { Shooter } from "./Shooter";
 import { Bullet } from "./Bullet";
-import { ARENAS } from "./arenas";
+import { Explosion } from "./Explosion";
+import { ARENAS, BUILDINGS } from "./arenas";
 
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
 
@@ -37,13 +37,72 @@ interface DamagePopup {
   color: string;
 }
 
+interface ExplosionState {
+  id: number;
+  x: number;
+  z: number;
+  startedAt: number;
+}
+
 let bulletId = 0;
 let popupId = 0;
+let explosionId = 0;
+let carIdCounter = 0;
 
-const ARENA_BOUND = 22;
+const ARENA_BOUND = 26;
+const PLAYER_RADIUS = 0.5;
+const CAR_HALF_X = 1.1;
+const CAR_HALF_Z = 2.1;
+
+function buildCars(arena: typeof ARENAS[number]): CarInstance[] {
+  const colors = ["#b03030", "#2a4a8a", "#1a1a1a", "#d4a020", "#3a7a3a", "#7a3a7a", "#c0c0c0"];
+  return Array.from({ length: arena.carCount }, (_, i) => {
+    const angle = (i / arena.carCount) * Math.PI * 2 + (i * 0.7);
+    const r = 10 + ((i * 3.1) % 12);
+    return {
+      id: ++carIdCounter,
+      x: Math.cos(angle) * r,
+      z: Math.sin(angle) * r,
+      rot: (i * 1.3) % (Math.PI * 2),
+      color: colors[i % colors.length],
+      hp: 60,
+      destroyed: false,
+    };
+  });
+}
+
+// Collision: returns true if the AABB of the point (with radius) hits any blocker.
+function collidesAt(x: number, z: number, cars: CarInstance[]) {
+  // buildings
+  for (const b of BUILDINGS) {
+    if (
+      x > b.x - b.halfX - PLAYER_RADIUS &&
+      x < b.x + b.halfX + PLAYER_RADIUS &&
+      z > b.z - b.halfZ - PLAYER_RADIUS &&
+      z < b.z + b.halfZ + PLAYER_RADIUS
+    ) return true;
+  }
+  // cars (alive ones block; destroyed are walkable)
+  for (const c of cars) {
+    if (c.destroyed) continue;
+    // car local axis-aligned box rotated by c.rot — approximate by transforming the point
+    const dx = x - c.x;
+    const dz = z - c.z;
+    const cos = Math.cos(-c.rot);
+    const sin = Math.sin(-c.rot);
+    const lx = dx * cos - dz * sin;
+    const lz = dx * sin + dz * cos;
+    if (
+      Math.abs(lx) < CAR_HALF_X + PLAYER_RADIUS &&
+      Math.abs(lz) < CAR_HALF_Z + PLAYER_RADIUS
+    ) return true;
+  }
+  return false;
+}
 
 function GameScene({
   arena,
+  cars,
   playerPos,
   playerRot,
   playerFiring,
@@ -51,9 +110,10 @@ function GameScene({
   playerRunning,
   enemies,
   bullets,
-  onPlayerHit,
+  explosions,
 }: {
-  arena: ReturnType<typeof getArena>;
+  arena: typeof ARENAS[number];
+  cars: CarInstance[];
   playerPos: { x: number; z: number };
   playerRot: number;
   playerFiring: boolean;
@@ -61,12 +121,10 @@ function GameScene({
   playerRunning: boolean;
   enemies: EnemyState[];
   bullets: BulletState[];
-  onPlayerHit: (id: number) => void;
+  explosions: ExplosionState[];
 }) {
   const { camera } = useThree();
-  void onPlayerHit;
   useFrame(() => {
-    // 3rd person camera follow
     const camTargetX = playerPos.x - Math.sin(playerRot) * 6;
     const camTargetZ = playerPos.z - Math.cos(playerRot) * 6;
     camera.position.x += (camTargetX - camera.position.x) * 0.12;
@@ -76,7 +134,7 @@ function GameScene({
   });
   return (
     <>
-      <Arena3D arena={arena} />
+      <Arena3D arena={arena} cars={cars} />
       <Shooter
         position={[playerPos.x, 0, playerPos.z]}
         rotationY={playerRot}
@@ -102,12 +160,11 @@ function GameScene({
       {bullets.map((b) => (
         <Bullet key={b.id} position={[b.x, b.y, b.z]} />
       ))}
+      {explosions.map((ex) => (
+        <Explosion key={ex.id} position={[ex.x, 0.6, ex.z]} startedAt={ex.startedAt} />
+      ))}
     </>
   );
-}
-
-function getArena(stage: number) {
-  return ARENAS[stage];
 }
 
 export default function Game() {
@@ -124,8 +181,12 @@ export default function Game() {
   const [enemies, setEnemies] = useState<EnemyState[]>([]);
   const [bullets, setBullets] = useState<BulletState[]>([]);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
+  const [explosions, setExplosions] = useState<ExplosionState[]>([]);
   const [screenFlash, setScreenFlash] = useState(false);
   const [kills, setKills] = useState(0);
+  const [cars, setCars] = useState<CarInstance[]>(() => buildCars(arena));
+  const carsRef = useRef<CarInstance[]>(cars);
+  useEffect(() => { carsRef.current = cars; }, [cars]);
 
   const keys = useRef<Record<string, boolean>>({});
   const lastShot = useRef(0);
@@ -138,13 +199,21 @@ export default function Game() {
     setTimeout(() => setPopups((p) => p.filter((d) => d.id !== id)), 800);
   }, []);
 
-  // spawn enemies per stage
+  const spawnExplosion = useCallback((x: number, z: number) => {
+    const id = ++explosionId;
+    setExplosions((e) => [...e, { id, x, z, startedAt: performance.now() / 1000 }]);
+    setTimeout(() => setExplosions((e) => e.filter((x) => x.id !== id)), 1000);
+  }, []);
+
+  // spawn enemies + cars per stage
   useEffect(() => {
     setPlayerHp(arena.playerHp);
     setPlayerPos({ x: 0, z: 4 });
     setPlayerRot(0);
     setKills(0);
     setBullets([]);
+    setExplosions([]);
+    setCars(buildCars(arena));
     const colors = ["#5a1a1a", "#3a2a1a", "#2a3a1a", "#4a1a3a", "#1a3a4a"];
     const newEnemies: EnemyState[] = Array.from({ length: arena.enemyCount }, (_, i) => {
       const a = (i / arena.enemyCount) * Math.PI * 2;
@@ -163,7 +232,7 @@ export default function Game() {
     setPhase("intro");
     const t = setTimeout(() => setPhase("fight"), 1800);
     return () => clearTimeout(t);
-  }, [stage, arena.playerHp, arena.enemyCount, arena.enemyHp]);
+  }, [stage, arena]);
 
   // input
   useEffect(() => {
@@ -219,7 +288,7 @@ export default function Game() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
-      // move player
+      // move player with collision (axis-separated to allow sliding)
       const fwd = (keys.current["w"] ? 1 : 0) - (keys.current["s"] ? 1 : 0);
       const strafe = (keys.current["d"] ? 1 : 0) - (keys.current["a"] ? 1 : 0);
       const isMoving = fwd !== 0 || strafe !== 0;
@@ -230,10 +299,15 @@ export default function Game() {
         const speed = (isRunning ? 11 : 6) * dt;
         const sin = Math.sin(playerRot);
         const cos = Math.cos(playerRot);
-        let nx = p.x + (sin * fwd + cos * strafe) * speed;
-        let nz = p.z + (cos * fwd - sin * strafe) * speed;
-        nx = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, nx));
-        nz = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, nz));
+        const dx = (sin * fwd + cos * strafe) * speed;
+        const dz = (cos * fwd - sin * strafe) * speed;
+        let nx = p.x;
+        let nz = p.z;
+        const cs = carsRef.current;
+        const tryX = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.x + dx));
+        if (!collidesAt(tryX, p.z, cs)) nx = tryX;
+        const tryZ = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.z + dz));
+        if (!collidesAt(nx, tryZ, cs)) nz = tryZ;
         return { x: nx, z: nz };
       });
 
@@ -257,22 +331,25 @@ export default function Game() {
         ]);
       }
 
-      // enemies AI
+      // enemies AI (with simple wall avoidance via collision)
       setEnemies((es) =>
         es.map((e) => {
           const dx = playerPos.x - e.x;
           const dz = playerPos.z - e.z;
           const dist = Math.hypot(dx, dz) || 1;
           const rot = Math.atan2(dx, dz);
-          // move toward player but stop at shoot range
           const range = 8;
           let nx = e.x;
           let nz = e.z;
           if (dist > range) {
-            nx += (dx / dist) * arena.enemySpeed * dt;
-            nz += (dz / dist) * arena.enemySpeed * dt;
+            const stepX = (dx / dist) * arena.enemySpeed * dt;
+            const stepZ = (dz / dist) * arena.enemySpeed * dt;
+            const tx = e.x + stepX;
+            const tz = e.z + stepZ;
+            const cs = carsRef.current;
+            if (!collidesAt(tx, e.z, cs)) nx = tx;
+            if (!collidesAt(nx, tz, cs)) nz = tz;
           }
-          // shoot
           const lastEnemyShot = enemyShotCd.current[e.id] || 0;
           if (dist < range + 4 && now - lastEnemyShot > 1400) {
             enemyShotCd.current[e.id] = now;
@@ -304,8 +381,60 @@ export default function Game() {
           if (nttl <= 0) continue;
 
           let consumed = false;
+
+          // bullets hit alive cars (either side)
+          const cs = carsRef.current;
+          for (const c of cs) {
+            if (c.destroyed) continue;
+            const ddx = nx - c.x;
+            const ddz = nz - c.z;
+            const cos = Math.cos(-c.rot);
+            const sin = Math.sin(-c.rot);
+            const lx = ddx * cos - ddz * sin;
+            const lz = ddx * sin + ddz * cos;
+            if (Math.abs(lx) < CAR_HALF_X && Math.abs(lz) < CAR_HALF_Z) {
+              consumed = true;
+              const dmg = b.fromPlayer ? arena.gunDamage : 5;
+              setCars((cur) => cur.map((cc) => {
+                if (cc.id !== c.id || cc.destroyed) return cc;
+                const newHp = cc.hp - dmg;
+                if (newHp <= 0) {
+                  spawnExplosion(cc.x, cc.z);
+                  addPopup("BOOM", "50%", "42%", "#ff8a2a");
+                  // damage nearby entities from blast
+                  setEnemies((eList) => eList.flatMap((en) => {
+                    const d = Math.hypot(en.x - cc.x, en.z - cc.z);
+                    if (d < 4.5) {
+                      const blast = 50;
+                      const nh = en.hp - blast;
+                      if (nh <= 0) {
+                        setKills((k) => k + 1);
+                        return [];
+                      }
+                      return [{ ...en, hp: nh, hit: true }];
+                    }
+                    return [en];
+                  }));
+                  const pd = Math.hypot(playerPos.x - cc.x, playerPos.z - cc.z);
+                  if (pd < 4.5) {
+                    setPlayerHp((hp) => {
+                      const next = Math.max(0, hp - 25);
+                      if (next <= 0) setPhase("defeat");
+                      return next;
+                    });
+                    setScreenFlash(true);
+                    setTimeout(() => setScreenFlash(false), 200);
+                  }
+                  return { ...cc, hp: 0, destroyed: true };
+                }
+                return { ...cc, hp: newHp };
+              }));
+              break;
+            }
+          }
+          if (consumed) continue;
+
           if (b.fromPlayer) {
-            // check enemy hits
             setEnemies((es) => {
               const hitIdx = es.findIndex((e) => Math.hypot(e.x - nx, e.z - nz) < 0.7);
               if (hitIdx === -1) return es;
@@ -328,7 +457,6 @@ export default function Game() {
               return copy;
             });
           } else {
-            // check player hit
             if (Math.hypot(playerPos.x - nx, playerPos.z - nz) < 0.7) {
               consumed = true;
               setPlayerHp((hp) => {
@@ -350,7 +478,7 @@ export default function Game() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [phase, playerRot, playerPos.x, playerPos.z, arena, addPopup]);
+  }, [phase, playerRot, playerPos.x, playerPos.z, arena, addPopup, spawnExplosion]);
 
   // victory check
   useEffect(() => {
@@ -360,12 +488,14 @@ export default function Game() {
   }, [enemies.length, phase, kills]);
 
   const hpPct = (playerHp / arena.playerHp) * 100;
+  const sceneCars = useMemo(() => cars, [cars]);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background" id="game-canvas">
       <Canvas shadows camera={{ position: [0, 5, -2], fov: 65 }}>
         <GameScene
           arena={arena}
+          cars={sceneCars}
           playerPos={playerPos}
           playerRot={playerRot}
           playerFiring={playerFiring}
@@ -373,7 +503,7 @@ export default function Game() {
           playerRunning={playerRunning}
           enemies={enemies}
           bullets={bullets}
-          onPlayerHit={() => {}}
+          explosions={explosions}
         />
       </Canvas>
 
@@ -438,7 +568,7 @@ export default function Game() {
       {phase === "fight" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center font-display text-xs uppercase tracking-[0.4em] text-muted-foreground">
           <span className="rounded border border-border bg-card/60 px-2 py-1 backdrop-blur">WASD</span> move &nbsp;·&nbsp;
-          <span className="rounded border border-border bg-card/60 px-2 py-1 backdrop-blur">MOUSE</span> aim &nbsp;·&nbsp;
+          <span className="rounded border border-border bg-card/60 px-2 py-1 backdrop-blur">SHIFT</span> run &nbsp;·&nbsp;
           <span className="rounded border border-border bg-card/60 px-2 py-1 backdrop-blur">CLICK</span> fire
         </div>
       )}
