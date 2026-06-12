@@ -1,12 +1,42 @@
-import * as THREE from "three";
-
 interface Props {
   position: [number, number, number];
   rotation?: number;
   color?: string;
+  destroyed?: boolean;
 }
 
-export function Car({ position, rotation = 0, color = "#b03030" }: Props) {
+export function Car({ position, rotation = 0, color = "#b03030", destroyed = false }: Props) {
+  if (destroyed) {
+    return (
+      <group position={position} rotation={[0, rotation, 0.15]}>
+        {/* burnt out hulk */}
+        <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2, 0.55, 4]} />
+          <meshStandardMaterial color="#1a1410" roughness={1} metalness={0.2} />
+        </mesh>
+        <mesh position={[0, 0.75, -0.1]} castShadow>
+          <boxGeometry args={[1.7, 0.45, 1.8]} />
+          <meshStandardMaterial color="#0a0808" roughness={1} />
+        </mesh>
+        {/* smoldering glow */}
+        <mesh position={[0, 0.6, 0]}>
+          <sphereGeometry args={[0.4, 8, 8]} />
+          <meshStandardMaterial color="#ff5a1a" emissive="#ff5a1a" emissiveIntensity={1.4} transparent opacity={0.55} />
+        </mesh>
+        {[
+          [-0.95, 0.25, 1.3],
+          [0.95, 0.25, 1.3],
+          [-0.95, 0.25, -1.3],
+          [0.95, 0.25, -1.3],
+        ].map((p, i) => (
+          <mesh key={i} position={p as [number, number, number]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.28, 0.28, 0.28, 12]} />
+            <meshStandardMaterial color="#050505" roughness={1} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
   return (
     <group position={position} rotation={[0, rotation, 0]}>
       {/* body */}
