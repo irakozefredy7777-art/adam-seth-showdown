@@ -2,21 +2,17 @@ import { useMemo } from "react";
 import type { Arena } from "./arenas";
 import { Car } from "./Car";
 
-export function Arena3D({ arena }: { arena: Arena }) {
-  const cars = useMemo(() => {
-    const colors = ["#b03030", "#2a4a8a", "#1a1a1a", "#d4a020", "#3a7a3a", "#7a3a7a", "#c0c0c0"];
-    return Array.from({ length: arena.carCount }, (_, i) => {
-      const angle = (i / arena.carCount) * Math.PI * 2 + Math.random();
-      const r = 10 + Math.random() * 12;
-      return {
-        x: Math.cos(angle) * r,
-        z: Math.sin(angle) * r,
-        rot: Math.random() * Math.PI * 2,
-        color: colors[i % colors.length],
-      };
-    });
-  }, [arena.name, arena.carCount]);
+export interface CarInstance {
+  id: number;
+  x: number;
+  z: number;
+  rot: number;
+  color: string;
+  hp: number;
+  destroyed: boolean;
+}
 
+export function Arena3D({ arena, cars }: { arena: Arena; cars: CarInstance[] }) {
   const debris = useMemo(() => Array.from({ length: 18 }, () => ({
     x: (Math.random() - 0.5) * 50,
     z: (Math.random() - 0.5) * 50,
@@ -84,8 +80,8 @@ export function Arena3D({ arena }: { arena: Arena }) {
       )}
 
       {/* cars */}
-      {cars.map((c, i) => (
-        <Car key={i} position={[c.x, 0, c.z]} rotation={c.rot} color={c.color} />
+      {cars.map((c) => (
+        <Car key={c.id} position={[c.x, 0, c.z]} rotation={c.rot} color={c.color} destroyed={c.destroyed} />
       ))}
 
       {/* debris */}
