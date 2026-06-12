@@ -55,6 +55,8 @@ function GameScene({
   playerPos: { x: number; z: number };
   playerRot: number;
   playerFiring: boolean;
+  playerWalking: boolean;
+  playerRunning: boolean;
   enemies: EnemyState[];
   bullets: BulletState[];
   onPlayerHit: (id: number) => void;
@@ -114,6 +116,8 @@ export default function Game() {
   const [playerPos, setPlayerPos] = useState({ x: 0, z: 4 });
   const [playerRot, setPlayerRot] = useState(0);
   const [playerFiring, setPlayerFiring] = useState(false);
+  const [playerWalking, setPlayerWalking] = useState(false);
+  const [playerRunning, setPlayerRunning] = useState(false);
   const [enemies, setEnemies] = useState<EnemyState[]>([]);
   const [bullets, setBullets] = useState<BulletState[]>([]);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
