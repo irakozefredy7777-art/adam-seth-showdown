@@ -9,6 +9,7 @@ interface Props {
   firing?: boolean;
   hit?: boolean;
   walking?: boolean;
+  running?: boolean;
   shirtColor?: string;
   skinColor?: string;
   scale?: number;
@@ -21,6 +22,7 @@ export function Shooter({
   firing,
   hit,
   walking,
+  running,
   shirtColor = "#2d5a8a",
   skinColor = "#f2cba0",
   scale = 1,
