@@ -220,10 +220,14 @@ export default function Game() {
       last = now;
 
       // move player
+      const fwd = (keys.current["w"] ? 1 : 0) - (keys.current["s"] ? 1 : 0);
+      const strafe = (keys.current["d"] ? 1 : 0) - (keys.current["a"] ? 1 : 0);
+      const isMoving = fwd !== 0 || strafe !== 0;
+      const isRunning = isMoving && (keys.current["shift"] || keys.current["shiftleft"] || keys.current["shiftright"]);
+      setPlayerWalking(isMoving);
+      setPlayerRunning(isRunning);
       setPlayerPos((p) => {
-        const speed = 6 * dt;
-        const fwd = (keys.current["w"] ? 1 : 0) - (keys.current["s"] ? 1 : 0);
-        const strafe = (keys.current["d"] ? 1 : 0) - (keys.current["a"] ? 1 : 0);
+        const speed = (isRunning ? 11 : 6) * dt;
         const sin = Math.sin(playerRot);
         const cos = Math.cos(playerRot);
         let nx = p.x + (sin * fwd + cos * strafe) * speed;
