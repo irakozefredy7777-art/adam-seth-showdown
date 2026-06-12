@@ -365,6 +365,8 @@ export default function Game() {
           playerPos={playerPos}
           playerRot={playerRot}
           playerFiring={playerFiring}
+          playerWalking={playerWalking}
+          playerRunning={playerRunning}
           enemies={enemies}
           bullets={bullets}
           onPlayerHit={() => {}}
