@@ -47,6 +47,8 @@ function GameScene({
   playerPos,
   playerRot,
   playerFiring,
+  playerWalking,
+  playerRunning,
   enemies,
   bullets,
   onPlayerHit,
@@ -55,6 +57,8 @@ function GameScene({
   playerPos: { x: number; z: number };
   playerRot: number;
   playerFiring: boolean;
+  playerWalking: boolean;
+  playerRunning: boolean;
   enemies: EnemyState[];
   bullets: BulletState[];
   onPlayerHit: (id: number) => void;
@@ -78,7 +82,8 @@ function GameScene({
         rotationY={playerRot}
         isPlayer
         firing={playerFiring}
-        walking={false}
+        walking={playerWalking}
+        running={playerRunning}
         shirtColor="#2d5a8a"
         skinColor="#f2cba0"
       />
@@ -114,6 +119,8 @@ export default function Game() {
   const [playerPos, setPlayerPos] = useState({ x: 0, z: 4 });
   const [playerRot, setPlayerRot] = useState(0);
   const [playerFiring, setPlayerFiring] = useState(false);
+  const [playerWalking, setPlayerWalking] = useState(false);
+  const [playerRunning, setPlayerRunning] = useState(false);
   const [enemies, setEnemies] = useState<EnemyState[]>([]);
   const [bullets, setBullets] = useState<BulletState[]>([]);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
@@ -213,10 +220,14 @@ export default function Game() {
       last = now;
 
       // move player
+      const fwd = (keys.current["w"] ? 1 : 0) - (keys.current["s"] ? 1 : 0);
+      const strafe = (keys.current["d"] ? 1 : 0) - (keys.current["a"] ? 1 : 0);
+      const isMoving = fwd !== 0 || strafe !== 0;
+      const isRunning = isMoving && (keys.current["shift"] || keys.current["shiftleft"] || keys.current["shiftright"]);
+      setPlayerWalking(isMoving);
+      setPlayerRunning(isRunning);
       setPlayerPos((p) => {
-        const speed = 6 * dt;
-        const fwd = (keys.current["w"] ? 1 : 0) - (keys.current["s"] ? 1 : 0);
-        const strafe = (keys.current["d"] ? 1 : 0) - (keys.current["a"] ? 1 : 0);
+        const speed = (isRunning ? 11 : 6) * dt;
         const sin = Math.sin(playerRot);
         const cos = Math.cos(playerRot);
         let nx = p.x + (sin * fwd + cos * strafe) * speed;
@@ -358,6 +369,8 @@ export default function Game() {
           playerPos={playerPos}
           playerRot={playerRot}
           playerFiring={playerFiring}
+          playerWalking={playerWalking}
+          playerRunning={playerRunning}
           enemies={enemies}
           bullets={bullets}
           onPlayerHit={() => {}}
