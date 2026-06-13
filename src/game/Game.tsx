@@ -5,6 +5,8 @@ import { Shooter } from "./Shooter";
 import { Bullet } from "./Bullet";
 import { Explosion } from "./Explosion";
 import { ARENAS, BUILDINGS } from "./arenas";
+import { Sound } from "./sound";
+import { STORY } from "./story";
 
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
 
@@ -187,6 +189,10 @@ export default function Game() {
   const [cars, setCars] = useState<CarInstance[]>(() => buildCars(arena));
   const carsRef = useRef<CarInstance[]>(cars);
   useEffect(() => { carsRef.current = cars; }, [cars]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sfxOn, setSfxOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(true);
+  const [stageFlash, setStageFlash] = useState(false);
 
   const keys = useRef<Record<string, boolean>>({});
   const lastShot = useRef(0);
@@ -230,7 +236,11 @@ export default function Game() {
     });
     setEnemies(newEnemies);
     setPhase("intro");
-    const t = setTimeout(() => setPhase("fight"), 1800);
+    setStageFlash(true);
+    setTimeout(() => setStageFlash(false), 700);
+    if (stage > 0) Sound.levelUp();
+    Sound.startMusic();
+    const t = setTimeout(() => setPhase("fight"), 2600);
     return () => clearTimeout(t);
   }, [stage, arena]);
 
