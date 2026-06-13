@@ -248,6 +248,11 @@ export default function Game() {
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       keys.current[e.key.toLowerCase()] = true;
+      if (e.key === "Escape") {
+        setShowSettings((s) => !s);
+        if (document.pointerLockElement) document.exitPointerLock?.();
+        return;
+      }
       if (phase !== "fight") {
         if (e.key === " " || e.key === "Enter") {
           if (phase === "victory") {
