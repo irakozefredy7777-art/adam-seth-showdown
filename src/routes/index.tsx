@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import Game from "@/game/Game";
+import StoryIntro from "@/game/StoryIntro";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -12,10 +13,13 @@ export const Route = createFileRoute("/")({
   }),
 });
 
+type Phase = "landing" | "intro" | "game";
+
 function Index() {
-  const [started, setStarted] = useState(false);
-  if (started) return <Game />;
-  return <Landing onStart={() => setStarted(true)} />;
+  const [phase, setPhase] = useState<Phase>("landing");
+  if (phase === "game") return <Game />;
+  if (phase === "intro") return <StoryIntro onDone={() => setPhase("game")} />;
+  return <Landing onStart={() => setPhase("intro")} />;
 }
 
 function Landing({ onStart }: { onStart: () => void }) {
