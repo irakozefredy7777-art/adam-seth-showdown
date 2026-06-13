@@ -325,6 +325,7 @@ export default function Game() {
       if (keys.current["fire"] && now - lastShot.current > arena.fireRate) {
         lastShot.current = now;
         setPlayerFiring(true);
+        Sound.shoot();
         setTimeout(() => setPlayerFiring(false), 80);
         setBullets((bs) => [
           ...bs,
@@ -363,6 +364,7 @@ export default function Game() {
           const lastEnemyShot = enemyShotCd.current[e.id] || 0;
           if (dist < range + 4 && now - lastEnemyShot > 1400) {
             enemyShotCd.current[e.id] = now;
+            Sound.enemyShoot();
             setBullets((bs) => [
               ...bs,
               {
@@ -410,6 +412,7 @@ export default function Game() {
                 const newHp = cc.hp - dmg;
                 if (newHp <= 0) {
                   spawnExplosion(cc.x, cc.z);
+                  Sound.explosion();
                   addPopup("BOOM", "50%", "42%", "#ff8a2a");
                   // damage nearby entities from blast
                   setEnemies((eList) => eList.flatMap((en) => {
@@ -469,9 +472,10 @@ export default function Game() {
           } else {
             if (Math.hypot(playerPos.x - nx, playerPos.z - nz) < 0.7) {
               consumed = true;
+              Sound.hit();
               setPlayerHp((hp) => {
                 const next = Math.max(0, hp - arena.enemyDamage);
-                if (next <= 0) setPhase("defeat");
+                if (next <= 0) { setPhase("defeat"); Sound.defeat(); Sound.stopMusic(); }
                 return next;
               });
               setScreenFlash(true);
@@ -494,6 +498,7 @@ export default function Game() {
   useEffect(() => {
     if (phase === "fight" && enemies.length === 0 && kills > 0) {
       setPhase("victory");
+      Sound.victory();
     }
   }, [enemies.length, phase, kills]);
 
