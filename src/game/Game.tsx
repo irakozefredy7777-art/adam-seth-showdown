@@ -5,6 +5,8 @@ import { Shooter } from "./Shooter";
 import { Bullet } from "./Bullet";
 import { Explosion } from "./Explosion";
 import { ARENAS, BUILDINGS } from "./arenas";
+import { Sound } from "./sound";
+import { STORY } from "./story";
 
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
 
@@ -187,6 +189,10 @@ export default function Game() {
   const [cars, setCars] = useState<CarInstance[]>(() => buildCars(arena));
   const carsRef = useRef<CarInstance[]>(cars);
   useEffect(() => { carsRef.current = cars; }, [cars]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sfxOn, setSfxOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(true);
+  const [stageFlash, setStageFlash] = useState(false);
 
   const keys = useRef<Record<string, boolean>>({});
   const lastShot = useRef(0);
@@ -230,7 +236,11 @@ export default function Game() {
     });
     setEnemies(newEnemies);
     setPhase("intro");
-    const t = setTimeout(() => setPhase("fight"), 1800);
+    setStageFlash(true);
+    setTimeout(() => setStageFlash(false), 700);
+    if (stage > 0) Sound.levelUp();
+    Sound.startMusic();
+    const t = setTimeout(() => setPhase("fight"), 2600);
     return () => clearTimeout(t);
   }, [stage, arena]);
 
@@ -238,6 +248,11 @@ export default function Game() {
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       keys.current[e.key.toLowerCase()] = true;
+      if (e.key === "Escape") {
+        setShowSettings((s) => !s);
+        if (document.pointerLockElement) document.exitPointerLock?.();
+        return;
+      }
       if (phase !== "fight") {
         if (e.key === " " || e.key === "Enter") {
           if (phase === "victory") {
@@ -315,6 +330,7 @@ export default function Game() {
       if (keys.current["fire"] && now - lastShot.current > arena.fireRate) {
         lastShot.current = now;
         setPlayerFiring(true);
+        Sound.shoot();
         setTimeout(() => setPlayerFiring(false), 80);
         setBullets((bs) => [
           ...bs,
@@ -353,6 +369,7 @@ export default function Game() {
           const lastEnemyShot = enemyShotCd.current[e.id] || 0;
           if (dist < range + 4 && now - lastEnemyShot > 1400) {
             enemyShotCd.current[e.id] = now;
+            Sound.enemyShoot();
             setBullets((bs) => [
               ...bs,
               {
@@ -400,6 +417,7 @@ export default function Game() {
                 const newHp = cc.hp - dmg;
                 if (newHp <= 0) {
                   spawnExplosion(cc.x, cc.z);
+                  Sound.explosion();
                   addPopup("BOOM", "50%", "42%", "#ff8a2a");
                   // damage nearby entities from blast
                   setEnemies((eList) => eList.flatMap((en) => {
@@ -459,9 +477,10 @@ export default function Game() {
           } else {
             if (Math.hypot(playerPos.x - nx, playerPos.z - nz) < 0.7) {
               consumed = true;
+              Sound.hit();
               setPlayerHp((hp) => {
                 const next = Math.max(0, hp - arena.enemyDamage);
-                if (next <= 0) setPhase("defeat");
+                if (next <= 0) { setPhase("defeat"); Sound.defeat(); Sound.stopMusic(); }
                 return next;
               });
               setScreenFlash(true);
@@ -484,6 +503,7 @@ export default function Game() {
   useEffect(() => {
     if (phase === "fight" && enemies.length === 0 && kills > 0) {
       setPhase("victory");
+      Sound.victory();
     }
   }, [enemies.length, phase, kills]);
 
@@ -573,8 +593,25 @@ export default function Game() {
         </div>
       )}
 
+      {/* level change flash */}
+      {stageFlash && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `radial-gradient(circle at 50% 50%, ${arena.accent}55, transparent 70%)`,
+            animation: "flashOut 0.7s ease-out forwards",
+          }}
+        />
+      )}
+
       {/* overlays */}
-      {phase === "intro" && <Overlay title={arena.name} subtitle={arena.subtitle} />}
+      {phase === "intro" && (
+        <Overlay
+          title={arena.name}
+          subtitle={arena.subtitle}
+          story={stage === 0 ? STORY.intro : STORY.stages[stage]}
+        />
+      )}
       {phase === "victory" && (
         <Overlay
           title={stage < ARENAS.length - 1 ? "Area Clear" : "Final Stand Cleared"}
@@ -583,17 +620,81 @@ export default function Game() {
         />
       )}
       {phase === "defeat" && <Overlay title="Down" subtitle="You were overwhelmed" cta="Press SPACE to retry" tone="bad" />}
-      {phase === "complete" && <Overlay title="Legend of Adam" subtitle="All five districts cleared" cta="Press SPACE to begin again" />}
+      {phase === "complete" && (
+        <Overlay
+          title="Legend of Adam"
+          subtitle="All five districts cleared. The harbor is yours."
+          cta="Press SPACE to begin again"
+        />
+      )}
+
+      {/* settings button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setShowSettings((s) => !s); if (document.pointerLockElement) document.exitPointerLock?.(); }}
+        className="absolute right-4 top-4 z-20 rounded border border-border bg-card/70 px-3 py-1 font-display text-xs uppercase tracking-[0.3em] text-foreground/80 backdrop-blur hover:bg-card"
+      >
+        ⚙ Menu
+      </button>
+
+      {/* settings panel */}
+      {showSettings && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="w-[min(420px,90vw)] rounded border border-border bg-card p-8 shadow-2xl">
+            <h2 className="font-display text-3xl text-primary glow">Settings</h2>
+            <p className="mt-1 text-xs uppercase tracking-[0.3em] text-muted-foreground">Press ESC to close</p>
+            <div className="mt-6 space-y-4">
+              <SettingRow label="Sound Effects" on={sfxOn} onToggle={() => { const n = !sfxOn; setSfxOn(n); Sound.setSfx(n); }} />
+              <SettingRow label="Music" on={musicOn} onToggle={() => { const n = !musicOn; setMusicOn(n); Sound.setMusic(n); }} />
+            </div>
+            <div className="mt-8 border-t border-border pt-6">
+              <h3 className="font-display text-sm uppercase tracking-[0.3em] text-muted-foreground">Story</h3>
+              <p className="mt-2 text-sm leading-relaxed text-foreground/80">{STORY.intro}</p>
+            </div>
+            <div className="mt-6 border-t border-border pt-6">
+              <h3 className="font-display text-sm uppercase tracking-[0.3em] text-muted-foreground">Controls</h3>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                <div>WASD</div><div className="text-right text-foreground">Move</div>
+                <div>Shift</div><div className="text-right text-foreground">Run</div>
+                <div>Mouse</div><div className="text-right text-foreground">Aim</div>
+                <div>Click</div><div className="text-right text-foreground">Fire</div>
+                <div>Esc</div><div className="text-right text-foreground">Menu</div>
+                <div>Space</div><div className="text-right text-foreground">Continue / Retry</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="mt-8 w-full rounded border-2 border-primary bg-primary/10 py-3 font-display text-sm uppercase tracking-[0.4em] text-primary transition hover:bg-primary hover:text-primary-foreground"
+            >
+              Resume
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Overlay({ title, subtitle, cta, tone = "good" }: { title: string; subtitle: string; cta?: string; tone?: "good" | "bad" }) {
+function SettingRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex items-center justify-between rounded border border-border bg-muted/30 px-4 py-3">
+      <span className="font-display text-sm uppercase tracking-[0.3em] text-foreground/90">{label}</span>
+      <button
+        onClick={onToggle}
+        className={`rounded px-4 py-1 font-display text-xs uppercase tracking-[0.3em] transition ${on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+      >
+        {on ? "On" : "Off"}
+      </button>
+    </div>
+  );
+}
+
+function Overlay({ title, subtitle, cta, tone = "good", story }: { title: string; subtitle: string; cta?: string; tone?: "good" | "bad"; story?: string }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-      <div className="text-center">
+      <div className="max-w-2xl px-8 text-center">
         <h1 className={`font-display text-7xl ${tone === "bad" ? "text-destructive" : "text-primary"} glow`}>{title}</h1>
         <p className="mt-4 text-lg text-muted-foreground">{subtitle}</p>
+        {story && <p className="mt-6 text-base italic leading-relaxed text-foreground/80">&ldquo;{story}&rdquo;</p>}
         {cta && <p className="mt-8 font-display text-sm uppercase tracking-[0.4em] text-foreground/80">{cta}</p>}
       </div>
     </div>
