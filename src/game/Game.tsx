@@ -191,6 +191,12 @@ export default function Game() {
   const [cars, setCars] = useState<CarInstance[]>(() => buildCars(arena));
   const carsRef = useRef<CarInstance[]>(cars);
   useEffect(() => { carsRef.current = cars; }, [cars]);
+  const [medkits, setMedkits] = useState<MedKitInstance[]>([]);
+  const medkitsRef = useRef<MedKitInstance[]>(medkits);
+  useEffect(() => { medkitsRef.current = medkits; }, [medkits]);
+  const blockers = useMemo(() => blockersFor(arena.biome), [arena.biome]);
+  const blockersRef = useRef(blockers);
+  useEffect(() => { blockersRef.current = blockers; }, [blockers]);
   const [showSettings, setShowSettings] = useState(false);
   const [sfxOn, setSfxOn] = useState(true);
   const [musicOn, setMusicOn] = useState(true);
@@ -200,6 +206,10 @@ export default function Game() {
   const lastShot = useRef(0);
   const mouseX = useRef(0);
   const enemyShotCd = useRef<Record<number, number>>({});
+  const lastStep = useRef(0);
+  let medkitIdCounter = 0;
+  void medkitIdCounter;
+
 
   const addPopup = useCallback((value: string, x: string, y: string, color: string) => {
     const id = ++popupId;
