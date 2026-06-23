@@ -138,7 +138,7 @@ function GameScene({
   });
   return (
     <>
-      <Arena3D arena={arena} cars={cars} />
+      <Arena3D arena={arena} cars={cars} medkits={medkits} />
       <Shooter
         position={[playerPos.x, 0, playerPos.z]}
         rotationY={playerRot}
