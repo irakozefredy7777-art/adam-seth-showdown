@@ -104,6 +104,7 @@ function collidesAt(x: number, z: number, cars: CarInstance[], blockers: { x: nu
 function GameScene({
   arena,
   cars,
+  medkits,
   playerPos,
   playerRot,
   playerFiring,
@@ -115,6 +116,7 @@ function GameScene({
 }: {
   arena: typeof ARENAS[number];
   cars: CarInstance[];
+  medkits: MedKitInstance[];
   playerPos: { x: number; z: number };
   playerRot: number;
   playerFiring: boolean;
@@ -124,6 +126,7 @@ function GameScene({
   bullets: BulletState[];
   explosions: ExplosionState[];
 }) {
+
   const { camera } = useThree();
   useFrame(() => {
     const camTargetX = playerPos.x - Math.sin(playerRot) * 6;
