@@ -75,9 +75,8 @@ function buildCars(arena: typeof ARENAS[number]): CarInstance[] {
 }
 
 // Collision: returns true if the AABB of the point (with radius) hits any blocker.
-function collidesAt(x: number, z: number, cars: CarInstance[]) {
-  // buildings
-  for (const b of BUILDINGS) {
+function collidesAt(x: number, z: number, cars: CarInstance[], blockers: { x: number; z: number; halfX: number; halfZ: number }[]) {
+  for (const b of blockers) {
     if (
       x > b.x - b.halfX - PLAYER_RADIUS &&
       x < b.x + b.halfX + PLAYER_RADIUS &&
@@ -85,10 +84,8 @@ function collidesAt(x: number, z: number, cars: CarInstance[]) {
       z < b.z + b.halfZ + PLAYER_RADIUS
     ) return true;
   }
-  // cars (alive ones block; destroyed are walkable)
   for (const c of cars) {
     if (c.destroyed) continue;
-    // car local axis-aligned box rotated by c.rot — approximate by transforming the point
     const dx = x - c.x;
     const dz = z - c.z;
     const cos = Math.cos(-c.rot);
@@ -102,6 +99,7 @@ function collidesAt(x: number, z: number, cars: CarInstance[]) {
   }
   return false;
 }
+
 
 function GameScene({
   arena,
