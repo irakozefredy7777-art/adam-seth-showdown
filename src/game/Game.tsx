@@ -245,6 +245,8 @@ export default function Game() {
       if (clear) kits.push({ id: Date.now() + kits.length, x, z, taken: false });
     }
     setMedkits(kits);
+    const colors = ["#5a1a1a", "#3a2a1a", "#2a3a1a", "#4a1a3a", "#1a3a4a"];
+
 
     const newEnemies: EnemyState[] = Array.from({ length: arena.enemyCount }, (_, i) => {
       const a = (i / arena.enemyCount) * Math.PI * 2;
