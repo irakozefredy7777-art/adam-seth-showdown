@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Arena3D, type CarInstance } from "./Arena3D";
+import { Arena3D, type CarInstance, type MedKitInstance } from "./Arena3D";
 import { Shooter } from "./Shooter";
 import { Bullet } from "./Bullet";
 import { Explosion } from "./Explosion";
-import { ARENAS, BUILDINGS } from "./arenas";
+import { ARENAS, blockersFor } from "./arenas";
 import { Sound } from "./sound";
 import { STORY } from "./story";
+
 
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
 
