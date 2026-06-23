@@ -416,8 +416,10 @@ export default function Game() {
             const tx = e.x + stepX;
             const tz = e.z + stepZ;
             const cs = carsRef.current;
-            if (!collidesAt(tx, e.z, cs)) nx = tx;
-            if (!collidesAt(nx, tz, cs)) nz = tz;
+            const bl = blockersRef.current;
+            if (!collidesAt(tx, e.z, cs, bl)) nx = tx;
+            if (!collidesAt(nx, tz, cs, bl)) nz = tz;
+
           }
           const lastEnemyShot = enemyShotCd.current[e.id] || 0;
           if (dist < range + 4 && now - lastEnemyShot > 1400) {
