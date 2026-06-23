@@ -44,10 +44,18 @@ function noise(dur: number, vol = 0.2, filterFreq = 1200) {
 }
 
 export const Sound = {
-  shoot() { tone(880, 0.08, "square", 0.12, 220); noise(0.05, 0.08, 2000); },
-  hit() { tone(180, 0.12, "sawtooth", 0.18, 60); },
+  shoot() {
+    tone(1100, 0.06, "square", 0.14, 180);
+    tone(360, 0.09, "sawtooth", 0.10, 90);
+    noise(0.06, 0.12, 2400);
+  },
+  hit() { tone(180, 0.12, "sawtooth", 0.18, 60); noise(0.06, 0.08, 600); },
   enemyShoot() { tone(420, 0.09, "square", 0.08, 140); },
   explosion() { noise(0.6, 0.35, 800); tone(80, 0.5, "sine", 0.25, 30); },
+  pickup() {
+    [660, 880, 1175].forEach((f, i) => setTimeout(() => tone(f, 0.12, "triangle", 0.18), i * 60));
+  },
+  footstep() { noise(0.04, 0.04, 350); },
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.18, "triangle", 0.18), i * 90)); },
   defeat() { tone(220, 0.5, "sawtooth", 0.2, 60); tone(165, 0.6, "sawtooth", 0.15, 50); },
   victory() { [523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.25, "triangle", 0.2), i * 120)); },
