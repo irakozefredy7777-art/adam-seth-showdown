@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Arena3D, type CarInstance } from "./Arena3D";
+import { Arena3D, type CarInstance, type MedKitInstance } from "./Arena3D";
 import { Shooter } from "./Shooter";
 import { Bullet } from "./Bullet";
 import { Explosion } from "./Explosion";
-import { ARENAS, BUILDINGS } from "./arenas";
+import { ARENAS, blockersFor } from "./arenas";
 import { Sound } from "./sound";
 import { STORY } from "./story";
+
 
 type Phase = "intro" | "fight" | "victory" | "defeat" | "complete";
 
@@ -74,9 +75,8 @@ function buildCars(arena: typeof ARENAS[number]): CarInstance[] {
 }
 
 // Collision: returns true if the AABB of the point (with radius) hits any blocker.
-function collidesAt(x: number, z: number, cars: CarInstance[]) {
-  // buildings
-  for (const b of BUILDINGS) {
+function collidesAt(x: number, z: number, cars: CarInstance[], blockers: { x: number; z: number; halfX: number; halfZ: number }[]) {
+  for (const b of blockers) {
     if (
       x > b.x - b.halfX - PLAYER_RADIUS &&
       x < b.x + b.halfX + PLAYER_RADIUS &&
@@ -84,10 +84,8 @@ function collidesAt(x: number, z: number, cars: CarInstance[]) {
       z < b.z + b.halfZ + PLAYER_RADIUS
     ) return true;
   }
-  // cars (alive ones block; destroyed are walkable)
   for (const c of cars) {
     if (c.destroyed) continue;
-    // car local axis-aligned box rotated by c.rot — approximate by transforming the point
     const dx = x - c.x;
     const dz = z - c.z;
     const cos = Math.cos(-c.rot);
@@ -102,9 +100,11 @@ function collidesAt(x: number, z: number, cars: CarInstance[]) {
   return false;
 }
 
+
 function GameScene({
   arena,
   cars,
+  medkits,
   playerPos,
   playerRot,
   playerFiring,
@@ -116,6 +116,7 @@ function GameScene({
 }: {
   arena: typeof ARENAS[number];
   cars: CarInstance[];
+  medkits: MedKitInstance[];
   playerPos: { x: number; z: number };
   playerRot: number;
   playerFiring: boolean;
@@ -125,6 +126,7 @@ function GameScene({
   bullets: BulletState[];
   explosions: ExplosionState[];
 }) {
+
   const { camera } = useThree();
   useFrame(() => {
     const camTargetX = playerPos.x - Math.sin(playerRot) * 6;
@@ -136,7 +138,7 @@ function GameScene({
   });
   return (
     <>
-      <Arena3D arena={arena} cars={cars} />
+      <Arena3D arena={arena} cars={cars} medkits={medkits} />
       <Shooter
         position={[playerPos.x, 0, playerPos.z]}
         rotationY={playerRot}
@@ -189,6 +191,12 @@ export default function Game() {
   const [cars, setCars] = useState<CarInstance[]>(() => buildCars(arena));
   const carsRef = useRef<CarInstance[]>(cars);
   useEffect(() => { carsRef.current = cars; }, [cars]);
+  const [medkits, setMedkits] = useState<MedKitInstance[]>([]);
+  const medkitsRef = useRef<MedKitInstance[]>(medkits);
+  useEffect(() => { medkitsRef.current = medkits; }, [medkits]);
+  const blockers = useMemo(() => blockersFor(arena.biome), [arena.biome]);
+  const blockersRef = useRef(blockers);
+  useEffect(() => { blockersRef.current = blockers; }, [blockers]);
   const [showSettings, setShowSettings] = useState(false);
   const [sfxOn, setSfxOn] = useState(true);
   const [musicOn, setMusicOn] = useState(true);
@@ -198,6 +206,8 @@ export default function Game() {
   const lastShot = useRef(0);
   const mouseX = useRef(0);
   const enemyShotCd = useRef<Record<number, number>>({});
+  const lastStep = useRef(0);
+
 
   const addPopup = useCallback((value: string, x: string, y: string, color: string) => {
     const id = ++popupId;
@@ -220,7 +230,22 @@ export default function Game() {
     setBullets([]);
     setExplosions([]);
     setCars(buildCars(arena));
+    // spawn medkits in open spots
+    const bl = blockersFor(arena.biome);
+    const kits: MedKitInstance[] = [];
+    let attempts = 0;
+    while (kits.length < arena.medkitCount && attempts < 80) {
+      attempts++;
+      const x = (Math.random() - 0.5) * 36;
+      const z = (Math.random() - 0.5) * 36;
+      const clear = !bl.some((b) => Math.abs(x - b.x) < b.halfX + 1 && Math.abs(z - b.z) < b.halfZ + 1)
+        && Math.hypot(x, z - 4) > 5;
+      if (clear) kits.push({ id: Date.now() + kits.length, x, z, taken: false });
+    }
+    setMedkits(kits);
     const colors = ["#5a1a1a", "#3a2a1a", "#2a3a1a", "#4a1a3a", "#1a3a4a"];
+
+
     const newEnemies: EnemyState[] = Array.from({ length: arena.enemyCount }, (_, i) => {
       const a = (i / arena.enemyCount) * Math.PI * 2;
       const r = 12 + Math.random() * 6;
@@ -319,12 +344,38 @@ export default function Game() {
         let nx = p.x;
         let nz = p.z;
         const cs = carsRef.current;
+        const bl = blockersRef.current;
         const tryX = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.x + dx));
-        if (!collidesAt(tryX, p.z, cs)) nx = tryX;
+        if (!collidesAt(tryX, p.z, cs, bl)) nx = tryX;
         const tryZ = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.z + dz));
-        if (!collidesAt(nx, tryZ, cs)) nz = tryZ;
+        if (!collidesAt(nx, tryZ, cs, bl)) nz = tryZ;
+
+        // footstep cadence
+        if (isMoving) {
+          const interval = isRunning ? 280 : 420;
+          if (now - lastStep.current > interval) {
+            lastStep.current = now;
+            Sound.footstep();
+          }
+        }
+
+        // medkit pickup detection
+        const mk = medkitsRef.current;
+        for (const m of mk) {
+          if (m.taken) continue;
+          if (Math.hypot(m.x - nx, m.z - nz) < 0.9) {
+            const heal = 60;
+            setMedkits((cur) => cur.map((c) => (c.id === m.id ? { ...c, taken: true } : c)));
+            setPlayerHp((hp) => Math.min(arena.playerHp, hp + heal));
+            Sound.pickup();
+            addPopup(`+${heal}`, "50%", "55%", "#5cff8a");
+            break;
+          }
+        }
+
         return { x: nx, z: nz };
       });
+
 
       // player shoot
       if (keys.current["fire"] && now - lastShot.current > arena.fireRate) {
@@ -363,8 +414,10 @@ export default function Game() {
             const tx = e.x + stepX;
             const tz = e.z + stepZ;
             const cs = carsRef.current;
-            if (!collidesAt(tx, e.z, cs)) nx = tx;
-            if (!collidesAt(nx, tz, cs)) nz = tz;
+            const bl = blockersRef.current;
+            if (!collidesAt(tx, e.z, cs, bl)) nx = tx;
+            if (!collidesAt(nx, tz, cs, bl)) nz = tz;
+
           }
           const lastEnemyShot = enemyShotCd.current[e.id] || 0;
           if (dist < range + 4 && now - lastEnemyShot > 1400) {
@@ -516,6 +569,8 @@ export default function Game() {
         <GameScene
           arena={arena}
           cars={sceneCars}
+          medkits={medkits}
+
           playerPos={playerPos}
           playerRot={playerRot}
           playerFiring={playerFiring}
