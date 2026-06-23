@@ -232,7 +232,20 @@ export default function Game() {
     setBullets([]);
     setExplosions([]);
     setCars(buildCars(arena));
-    const colors = ["#5a1a1a", "#3a2a1a", "#2a3a1a", "#4a1a3a", "#1a3a4a"];
+    // spawn medkits in open spots
+    const bl = blockersFor(arena.biome);
+    const kits: MedKitInstance[] = [];
+    let attempts = 0;
+    while (kits.length < arena.medkitCount && attempts < 80) {
+      attempts++;
+      const x = (Math.random() - 0.5) * 36;
+      const z = (Math.random() - 0.5) * 36;
+      const clear = !bl.some((b) => Math.abs(x - b.x) < b.halfX + 1 && Math.abs(z - b.z) < b.halfZ + 1)
+        && Math.hypot(x, z - 4) > 5;
+      if (clear) kits.push({ id: Date.now() + kits.length, x, z, taken: false });
+    }
+    setMedkits(kits);
+
     const newEnemies: EnemyState[] = Array.from({ length: arena.enemyCount }, (_, i) => {
       const a = (i / arena.enemyCount) * Math.PI * 2;
       const r = 12 + Math.random() * 6;
