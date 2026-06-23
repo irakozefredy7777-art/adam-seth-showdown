@@ -346,12 +346,38 @@ export default function Game() {
         let nx = p.x;
         let nz = p.z;
         const cs = carsRef.current;
+        const bl = blockersRef.current;
         const tryX = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.x + dx));
-        if (!collidesAt(tryX, p.z, cs)) nx = tryX;
+        if (!collidesAt(tryX, p.z, cs, bl)) nx = tryX;
         const tryZ = Math.max(-ARENA_BOUND, Math.min(ARENA_BOUND, p.z + dz));
-        if (!collidesAt(nx, tryZ, cs)) nz = tryZ;
+        if (!collidesAt(nx, tryZ, cs, bl)) nz = tryZ;
+
+        // footstep cadence
+        if (isMoving) {
+          const interval = isRunning ? 280 : 420;
+          if (now - lastStep.current > interval) {
+            lastStep.current = now;
+            Sound.footstep();
+          }
+        }
+
+        // medkit pickup detection
+        const mk = medkitsRef.current;
+        for (const m of mk) {
+          if (m.taken) continue;
+          if (Math.hypot(m.x - nx, m.z - nz) < 0.9) {
+            const heal = 60;
+            setMedkits((cur) => cur.map((c) => (c.id === m.id ? { ...c, taken: true } : c)));
+            setPlayerHp((hp) => Math.min(arena.playerHp, hp + heal));
+            Sound.pickup();
+            addPopup(`+${heal}`, "50%", "55%", "#5cff8a");
+            break;
+          }
+        }
+
         return { x: nx, z: nz };
       });
+
 
       // player shoot
       if (keys.current["fire"] && now - lastShot.current > arena.fireRate) {
