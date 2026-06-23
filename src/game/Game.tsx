@@ -207,8 +207,6 @@ export default function Game() {
   const mouseX = useRef(0);
   const enemyShotCd = useRef<Record<number, number>>({});
   const lastStep = useRef(0);
-  let medkitIdCounter = 0;
-  void medkitIdCounter;
 
 
   const addPopup = useCallback((value: string, x: string, y: string, color: string) => {
