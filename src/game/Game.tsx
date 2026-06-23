@@ -571,6 +571,8 @@ export default function Game() {
         <GameScene
           arena={arena}
           cars={sceneCars}
+          medkits={medkits}
+
           playerPos={playerPos}
           playerRot={playerRot}
           playerFiring={playerFiring}
